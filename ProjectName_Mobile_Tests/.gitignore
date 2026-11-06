@@ -1,0 +1,12 @@
+node_modules/
+build/
+reports/
+logs/
+*.log
+.env
+apps/*.apk
+apps/*.ipa
+apps/*.app
+apps/*.zip
+!apps/.gitkeep
+.DS_Store

@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"],
+    "outDir": "./build",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["e2e/**/*.ts", "wdio.conf/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules", "build", "reports"]
+}

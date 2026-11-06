@@ -1,0 +1,5 @@
+ProjectName_Mobile_Tests/node_modules/
+ProjectName_Mobile_Tests/build/
+ProjectName_Mobile_Tests/reports/
+ProjectName_Mobile_Tests/.env
+.DS_Store

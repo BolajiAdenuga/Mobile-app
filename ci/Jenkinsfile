@@ -1,0 +1,116 @@
+// Jenkinsfile for the mobile automation framework (ProjectName_Mobile_Tests).
+//
+// Requirements on the Jenkins side (see README.md "CI/CD (Jenkins)" for detail):
+//   - An agent labeled "android-emulator": Linux/macOS with Android SDK,
+//     an AVD already created, and hardware acceleration (KVM/HAXM) enabled.
+//   - An agent labeled "macos-ios-simulator": macOS with Xcode + the
+//     simulator runtime installed. iOS simulators cannot run on Linux/Windows.
+//   - Appium installed on both agents (`npm run appium:setup` as part of this
+//     pipeline handles the driver plugins; Appium itself comes from this
+//     project's devDependencies).
+//
+// BrowserStack is intentionally NOT part of the default pipeline — our plan
+// has limited allocated minutes. It's a separate, manually-triggered stage.
+
+pipeline {
+    agent none
+
+    parameters {
+        booleanParam(
+            name: 'RUN_BROWSERSTACK_REGRESSION',
+            defaultValue: false,
+            description: 'Also run the BrowserStack cross-device regression suite (uses limited plan minutes).'
+        )
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('Test') {
+            parallel {
+                stage('Android') {
+                    agent { label 'android-emulator' }
+                    steps {
+                        dir('ProjectName_Mobile_Tests') {
+                            sh 'npm ci'
+                            sh 'npm run appium:setup || true'
+                            // Adjust to however the app binary actually reaches this
+                            // workspace for your app (upstream build job artifact,
+                            // artifact repository, etc.) — this template assumes it
+                            // is copied into ./apps before this stage runs.
+                            sh 'emulator -avd "$ANDROID_AVD_NAME" -no-window -no-audio -no-boot-anim &'
+                            sh 'adb wait-for-device'
+                            sh 'appium --port 4723 --log-timestamp &'
+                            sh 'sleep 5'
+                            sh 'npm run test:android:ci'
+                        }
+                    }
+                    post {
+                        always {
+                            dir('ProjectName_Mobile_Tests') {
+                                archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+                            }
+                        }
+                    }
+                }
+
+                stage('iOS') {
+                    agent { label 'macos-ios-simulator' }
+                    steps {
+                        dir('ProjectName_Mobile_Tests') {
+                            sh 'npm ci'
+                            sh 'npm run appium:setup || true'
+                            // Adjust to however the .app build reaches this workspace.
+                            sh 'xcrun simctl boot "$IOS_SIMULATOR_UDID" || true'
+                            sh 'appium --port 4723 --log-timestamp &'
+                            sh 'sleep 5'
+                            sh 'npm run test:ios:ci'
+                        }
+                    }
+                    post {
+                        always {
+                            dir('ProjectName_Mobile_Tests') {
+                                archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('BrowserStack regression') {
+            when {
+                expression { params.RUN_BROWSERSTACK_REGRESSION }
+            }
+            agent { label 'android-emulator' }
+            environment {
+                BROWSERSTACK_CREDS = credentials('browserstack-app-automate')
+            }
+            steps {
+                dir('ProjectName_Mobile_Tests') {
+                    sh 'npm ci'
+                    withEnv([
+                        "BROWSERSTACK_USERNAME=${BROWSERSTACK_CREDS_USR}",
+                        "BROWSERSTACK_ACCESS_KEY=${BROWSERSTACK_CREDS_PSW}",
+                    ]) {
+                        sh 'npm run test:android:browserstack'
+                        sh 'npm run test:ios:browserstack'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            node('android-emulator') {
+                dir('ProjectName_Mobile_Tests') {
+                    allure includeProperties: false, jdk: '', results: [[path: 'reports/allure-results']]
+                }
+            }
+        }
+    }
+}
